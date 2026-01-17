@@ -5,9 +5,7 @@ pip install -r requirements.txt
 python scripts/seed_database.py
 
 # 3. Run the application
-python scripts/run_app.py
-📁 Run Scripts
-scripts/seed_database.py - Database Setup
+library.db - Database Setup
 # Creates SQLite database with books, customers, and orders tables
 # Inserts 10 sample books and 6 sample customers
 # Creates: db/library.db

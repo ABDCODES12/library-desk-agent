@@ -1,7 +1,6 @@
 # library-desk-agent
 # 1. Install dependencies
-pip install customtkinter requests langchain
-
+pip install -r requirements.txt
 # 2. Create database with sample data
 python scripts/seed_database.py
 
@@ -15,12 +14,10 @@ scripts/seed_database.py - Database Setup
 python scripts/seed_database.py
 # Output: ✅ Database seeded with 10 books and 6 customers
 
-scripts/run_app.py - Application Launcher
+python frontend.py - Application Launcher
 # Launches the Library Desk GUI
 # Starts the AI agent with tool calling capabilities
 Run it:
-python scripts/run_app.py
-# Launches the chat interface
 
 📊 What Gets Seeded
 Books Table (10 entries)

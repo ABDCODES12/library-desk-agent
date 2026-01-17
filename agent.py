@@ -7,7 +7,7 @@ from tools import TOOLS
 from db_functions import save_message
 
 # Configuration
-DEEPSEEK_API_KEY = "sk-4a762e7991934aafb521358bbc1b88d2"
+DEEPSEEK_API_KEY = "DEEPSEEKAPI PROVIDED IN THE EMAL"
 
 class CompatibleAgent:
     def __init__(self, session_id: str = "default_session"):
@@ -345,4 +345,5 @@ RETURN BOTH RESULTS.
         return "Chat reset."
 
 # Create agent
+
 agent = CompatibleAgent(session_id="default_session")

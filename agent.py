@@ -1,349 +1,432 @@
-# agent_proper.py - LET AI DO THE WORK
-import os
-import json
-import requests
-from typing import List, Dict
-from tools import TOOLS
-from db_functions import save_message
+from langchain.tools import tool
+from typing import Optional, Dict, Any
+from db_functions import (
+    find_books,
+    create_order,
+    restock_book,
+    update_price,
+    order_status,
+    inventory_summary,
+    save_tool_call,
+    get_customer_id,
+    get_isbn_by_title
+)
 
-# Configuration
-DEEPSEEK_API_KEY = "DEEPSEEKAPI PROVIDED IN THE EMAL"
+# Helper functions
+def get_customer_id(customer_input: str) -> Optional[int]:
+    """Convert customer input to customer ID"""
+    from db_functions import get_customer_id as db_get_customer_id
+    return db_get_customer_id(customer_input)
 
-class CompatibleAgent:
-    def __init__(self, session_id: str = "default_session"):
-        self.session_id = session_id
-        self.chat_history = []
-        self.tool_map = {tool.name: tool for tool in TOOLS}
-        print(f"✅ Agent loaded {len(self.tool_map)} tools")
+def get_isbn_by_title(title: str) -> Optional[str]:
+    """Get ISBN by book title"""
+    from db_functions import get_isbn_by_title as db_get_isbn_by_title
+    return db_get_isbn_by_title(title)
+
+@tool
+def find_books_tool(q: str, by: str = "title") -> str:
+    """
+    Find books by title or author.
     
-    def run(self, user_input: str) -> str:
-        """Process user message"""
-        try:
-            save_message(self.session_id, "user", user_input)
-            self.chat_history.append({"role": "user", "content": user_input})
-            
-            response = self._get_ai_response(user_input)
-            
-            save_message(self.session_id, "assistant", response)
-            self.chat_history.append({"role": "assistant", "content": response})
-            
-            return response
-        except Exception as e:
-            return f"Error: {str(e)}"
+    CROSS-FUNCTION RELATIONSHIPS:
+    1. With create_order_tool: Check availability before creating orders
+    2. With restock_book_tool: Find books that need restocking
+    3. With update_price_tool: Find books before price updates
+    4. With order_status_tool: Find book details for order items
+    5. With inventory_summary_tool: Get details of low-stock books
     
-    def _get_ai_response(self, user_input: str) -> str:
-        """Get response from AI with proper tool calling"""
-        
-        system_prompt = """You are a library assistant. You MUST execute MULTIPLE tools when user asks for multiple actions.
-
-WHEN USER SAYS: "Restock The Pragmatic Programmer by 10 and list all books by Andrew Hunt."
-YOU **MUST IMMEDIATELY EXECUTE:**
-1. restock_book_tool(isbn="9780201616224", quantity=10)
-2. find_books_tool(q="Andrew Hunt", by="author")
-RETURN BOTH RESULTS.
-
-WHEN USER SAYS: "Restock X and list books by Y"
-YOU **MUST IMMEDIATELY EXECUTE:**
-1. restock_book_tool for X
-2. find_books_tool for Y with by="author"
-
-WHEN USER SAYS: "Create order for X and check inventory"
-YOU **MUST IMMEDIATELY EXECUTE:**
-1. create_order_tool for X
-2. inventory_summary_tool()
-
-WHEN USER SAYS: "Update price of X and search for Y"
-YOU **MUST IMMEDIATELY EXECUTE:**
-1. update_price_tool for X
-2. find_books_tool for Y
-
-**NO DISCUSSION. NO SUGGESTIONS. EXECUTE IMMEDIATELY.**
-
-**IF YOU SEE "AND" IN THE REQUEST, YOU MUST EXECUTE MULTIPLE TOOLS.**
-
-**IF USER ASKS FOR TWO THINGS, YOU DO TWO THINGS.**
-
-**STOP THINKING. START EXECUTING.**
-
-**TOOLS AND PARAMETERS:**
-
-1. find_books_tool(q, by)
-   - q: search term
-   - by: "author" or "title"
-
-2. create_order_tool(book_title, customer_input, quantity=1)
-
-3. restock_book_tool(isbn, quantity)
-
-4. order_status_tool(order_id)
-
-5. inventory_summary_tool(threshold=5)
-
-6. update_price_tool(isbn, new_price)
-
-**ISBN MAPPING:**
-- The Pragmatic Programmer → 9780201616224
-- Clean Code → 9780132350884
-- Fluent Python → 9781491957660
-- Introduction to Algorithms → 9780262033848
-- Clean Architecture → 9780134494166
-- Spring in Action → 9781617296086
-
-**EXECUTION EXAMPLES - COPY THESE EXACTLY:**
-
-EXAMPLE 1:
-User: "Restock The Pragmatic Programmer by 10 and list all books by Andrew Hunt."
-You EXECUTE:
-1. restock_book_tool(isbn="9780201616224", quantity=10)
-2. find_books_tool(q="Andrew Hunt", by="author")
-RETURN BOTH RESULTS.
-
-EXAMPLE 2:
-User: "Restock Clean Code by 5 and find books about Python."
-You EXECUTE:
-1. restock_book_tool(isbn="9780132350884", quantity=5)
-2. find_books_tool(q="Python", by="title")
-RETURN BOTH RESULTS.
-
-EXAMPLE 3:
-User: "Sara bought Clean Architecture and check inventory."
-You EXECUTE:
-1. create_order_tool(book_title="Clean Architecture", customer_input="Sara", quantity=1)
-2. inventory_summary_tool(threshold=5)
-RETURN BOTH RESULTS.
-
-"""
-
-        
-        # Build conversation
-        messages = [
-            {"role": "system", "content": system_prompt}
-        ]
-        
-        # Add conversation history
-        for msg in self.chat_history[-4:]:  # Last 4 messages for context
-            messages.append(msg)
-        
-        messages.append({"role": "user", "content": user_input})
-        
-        # Tool definitions (must match tools.py)
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "find_books_tool",
-                    "description": "Search for books by title or author. Use by='author' when searching for books by a specific author, by='title' for general searches.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "q": {"type": "string", "description": "Search term (author name or book title)"},
-                            "by": {"type": "string", "enum": ["title", "author"], "description": "'author' for author searches, 'title' for title searches"}
-                        },
-                        "required": ["q"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "create_order_tool",
-                    "description": "Create a new order when books are sold. Reduces stock automatically.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "book_title": {"type": "string", "description": "Book title (e.g., 'Clean Code', 'The Pragmatic Programmer')"},
-                            "customer_input": {"type": "string", "description": "Customer ID (1-5), 'customer X', or name"},
-                            "quantity": {"type": "integer", "description": "Number of copies sold", "default": 1}
-                        },
-                        "required": ["book_title", "customer_input"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "restock_book_tool",
-                    "description": "Add more copies of a book to inventory",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "isbn": {"type": "string", "description": "Book ISBN (e.g., '9780201616224' for The Pragmatic Programmer)"},
-                            "quantity": {"type": "integer", "description": "Number of copies to add"}
-                        },
-                        "required": ["isbn", "quantity"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "order_status_tool",
-                    "description": "Check the status and details of an order",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "order_id": {"type": "integer", "description": "Order ID number"}
-                        },
-                        "required": ["order_id"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "inventory_summary_tool",
-                    "description": "Get summary of inventory including low stock books",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "threshold": {"type": "integer", "description": "Low stock threshold (default: 5)"}
-                        },
-                        "required": []
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "update_price_tool",
-                    "description": "Update the price of a book",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "isbn": {"type": "string", "description": "Book ISBN"},
-                            "new_price": {"type": "number", "description": "New price in dollars"}
-                        },
-                        "required": ["isbn", "new_price"]
-                    }
-                }
-            }
-        ]
-        
-        # Call appropriate API
-  
-        return self._call_deepseek(messages, tools)
+    When used together:
+    - find_books_tool + create_order_tool: Verify stock before ordering
+    - find_books_tool + restock_book_tool: Identify books needing restock
+    - find_books_tool + inventory_summary_tool: Detailed low-stock analysis
     
+    Args:
+        q: Search query
+        by: Search by "title" or "author" (default: "title")
+    
+    Returns:
+        Formatted string of matching books with current stock
+    """
+    result = find_books(q, by)
+    
+    if isinstance(result, dict) and "error" in result:
+        return f"❌ Error: {result['error']}"
+    
+    if not result:
+        return f"No books found for '{q}' (searching by {by})."
+    
+    # Format the results
+    books_list = []
+    for i, book in enumerate(result, 1):
+        stock_status = "🟢 Good" if book['stock'] > 5 else "🟡 Low" if book['stock'] > 0 else "🔴 Out"
+        books_list.append(
+            f"{i}. **{book['title']}** by {book['author']}\n"
+            f"   ISBN: {book['isbn']}, Price: ${book['price']:.2f}\n"
+            f"   Stock: {book['stock']} copies ({stock_status})"
+        )
+    
+    save_tool_call("default_session", "find_books", {"q": q, "by": by}, {"count": len(result)})
+    
+    return f"📚 Found {len(result)} book(s) for '{q}' (searching by {by}):\n\n" + "\n\n".join(books_list)
 
+@tool
+def create_order_tool(book_title: str, customer_input: str, quantity: int = 1) -> str:
+    """
+    Create a new order for a book.
     
-    def _call_deepseek(self, messages, tools):
-        """Call DeepSeek API"""
-        headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": "deepseek-chat",
-            "messages": messages,
-            "tools": tools,
-            "tool_choice": "auto",
-            "temperature": 0.1,
-            "max_tokens": 1000
-        }
-        
-        try:
-            response = requests.post(
-                "https://api.deepseek.com/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code != 200:
-                print(f"DeepSeek API Error: {response.text}")
-                return "Service temporarily unavailable. Please try again."
-            
-            data = response.json()
-            message = data["choices"][0]["message"]
-            
-            if "tool_calls" in message:
-                return self._execute_tool_calls(message["tool_calls"])
-            else:
-                # Check if response is appropriate
-                content = message.get("content", "")
-                if self._should_have_used_tool(content):
-                    return "Please use the appropriate tool for this request. I need to access the database to help you."
-                return content
-                
-        except Exception as e:
-            print(f"DeepSeek Request Error: {e}")
-            return "Network error. Please try again."
+    CROSS-FUNCTION RELATIONSHIPS:
+    1. With find_books_tool: Check book existence and current stock
+    2. With inventory_summary_tool: See inventory impact after order
+    3. With order_status_tool: Verify the created order
+    4. With restock_book_tool: Restock if needed after large order
+    5. With update_price_tool: Check price before ordering
     
-    def _should_have_used_tool(self, content: str) -> bool:
-        """Check if AI should have used a tool"""
-        content_lower = content.lower()
-        
-        # If it's a generic or clarifying response, it's probably OK
-        clarifying_phrases = [
-            "can you clarify",
-            "what do you mean",
-            "i need more information",
-            "could you specify",
-            "which book",
-            "which customer",
-            "how many",
-            "please clarify"
-        ]
-        
-        # If it contains database-like info without using tools, it's bad
-        database_keywords = [
-            "clean code",
-            "pragmatic programmer",
-            "customer",
-            "order",
-            "stock",
-            "inventory",
-            "price",
-            "author",
-            "isbn"
-        ]
-        
-        has_database_info = any(keyword in content_lower for keyword in database_keywords)
-        is_clarifying = any(phrase in content_lower for phrase in clarifying_phrases)
-        
-        return has_database_info and not is_clarifying
+    When used together:
+    - find_books_tool + create_order_tool: Check availability then order
+    - create_order_tool + inventory_summary_tool: Order then check inventory status
+    - create_order_tool + order_status_tool: Create order then verify it
+    - create_order_tool + restock_book_tool: Order then restock low items
     
-    def _execute_tool_calls(self, tool_calls: List) -> str:
-        """Execute tool calls"""
-        results = []
-        
-        for tool_call in tool_calls:
-            try:
-                # Parse based on API format
-                if hasattr(tool_call, 'function'):  # OpenAI format
-                    name = tool_call.function.name
-                    args = json.loads(tool_call.function.arguments)
-                else:  # DeepSeek format
-                    name = tool_call["function"]["name"]
-                    args = json.loads(tool_call["function"]["arguments"])
-                
-                print(f"🔧 Executing: {name} with {args}")
-                
-                if name in self.tool_map:
-                    result = self.tool_map[name].invoke(args)
-                    results.append(str(result))
-                else:
-                    results.append(f"❌ Tool '{name}' not available")
-                    
-            except json.JSONDecodeError as e:
-                results.append(f"❌ Invalid arguments format: {e}")
-            except Exception as e:
-                results.append(f"❌ Error executing {name}: {str(e)}")
-        
-        # Combine results with separators
-        if len(results) == 1:
-            return results[0]
-        else:
-            separator = "\n" + "═" * 60 + "\n"
-            return separator.join(results)
+    Args:
+        book_title: Title of the book to order
+        customer_input: Customer ID or name (e.g., "1", "customer 1", "John Doe")
+        quantity: Number of copies (default: 1)
     
-    def get_chat_history(self):
-        return self.chat_history.copy()
+    Returns:
+        Confirmation message with order details and updated stock
+    """
+    # First use find_books_tool to check availability
+    search_result = find_books(book_title, by="title")
+    if not search_result:
+        return f"❌ Book '{book_title}' not found in inventory."
     
-    def reset_chat(self):
-        self.chat_history = []
-        return "Chat reset."
+    current_book = search_result[0]
+    current_stock = current_book['stock']
+    
+    if current_stock < quantity:
+        return f"❌ Insufficient stock for '{book_title}'. Available: {current_stock}, Requested: {quantity}"
+    
+    # Get customer ID
+    customer_id = get_customer_id(customer_input)
+    if not customer_id:
+        return f"Customer '{customer_input}' not found. Please use customer ID 1-5."
+    
+    # Get ISBN
+    isbn = get_isbn_by_title(book_title)
+    if not isbn:
+        return f"Could not find ISBN for book '{book_title}'."
+    
+    # Create order
+    result = create_order(customer_id, [{"isbn": isbn, "qty": quantity}])
+    
+    if "error" in result:
+        return f"Error creating order: {result['error']}"
+    
+    # Log tool call
+    save_tool_call("default_session", "create_order", 
+                  {"book_title": book_title, "customer_input": customer_input, "quantity": quantity},
+                  {"order_id": result['order_id'], "total_amount": result['total_amount']})
+    
+    response = f"✅ **Order #{result['order_id']} Created Successfully!**\n\n"
+    response += f"Order Details:\n"
+    response += f"  • Order ID: {result['order_id']}\n"
+    response += f"  • Customer: ID {customer_id}\n"
+    response += f"  • Book: {book_title}\n"
+    response += f"  • Quantity: {quantity}\n"
+    response += f"  • Total: ${result['total_amount']:.2f}\n"
+    response += f"  • Status: {result['status']}\n\n"
+    
+    # Show stock change
+    if "stock_changes" in result and result["stock_changes"]:
+        for change in result["stock_changes"]:
+            response += f"📊 Stock Update:\n"
+            response += f"  • Book: {change['title']}\n"
+            response += f"  • Old stock: {change['old_stock']} copies\n"
+            response += f"  • New stock: {change['new_stock']} copies\n"
+            response += f"  • Reduction: {change['old_stock'] - change['new_stock']} copies\n"
+    
+    
+    if result.get('stock_changes', [{}])[0].get('new_stock', 0) < 3:
+        response += f"  ⚠️ Low stock! Consider: `restock_book_tool(isbn='{isbn}', quantity=10)`\n"
+    
+    return response
 
-# Create agent
+@tool
+def restock_book_tool(isbn: str, quantity: int) -> str:
+    """
+    Restock a book by adding more copies.
+    
+    CROSS-FUNCTION RELATIONSHIPS:
+    1. With find_books_tool: Find books needing restock
+    2. With inventory_summary_tool: Check overall inventory before/after
+    3. With create_order_tool: Restock after large orders
+    4. With order_status_tool: Restock books from recent orders
+    5. With update_price_tool: Update price during restock
+    
+    When used together:
+    - inventory_summary_tool + restock_book_tool: Identify then restock low items
+    - find_books_tool + restock_book_tool: Find book then restock it
+    - create_order_tool + restock_book_tool: Order then restock same book
+    - order_status_tool + restock_book_tool: Check orders then restock popular items
+    
+    Args:
+        isbn: Book ISBN (e.g., "9780201616224")
+        quantity: Number of copies to add
+    
+    Returns:
+        Confirmation message with updated stock
+    """
+    # Check current stock using find_books
+    all_books = find_books("", by="title")
+    current_book = None
+    for book in all_books:
+        if book['isbn'] == isbn:
+            current_book = book
+            break
+    
+    if not current_book:
+        return f"❌ Book with ISBN {isbn} not found."
+    
+    old_stock = current_book['stock']
+    
+    # Restock the book
+    result = restock_book(isbn, quantity)
+    
+    if "error" in result:
+        return f"Error: {result['error']}"
+    
+    # Log tool call
+    save_tool_call("default_session", "restock_book", 
+                  {"isbn": isbn, "quantity": quantity},
+                  {"title": result['title'], "old_stock": old_stock, "new_stock": result['new_stock']})
+    
+    response = f"**Successfully Restocked!**\n\n"
+    response += f"Restock Details:\n"
+    response += f"  • Book: {result['title']}\n"
+    response += f"  • ISBN: {isbn}\n"
+    response += f"  • Added: {quantity} copies\n"
+    response += f"  • Old stock: {old_stock} copies\n"
+    response += f"  • New stock: {result['new_stock']} copies\n"
+    response += f"  • Increase: {quantity} copies (+{quantity/old_stock*100:.1f}%)\n\n"
+    
+    # Check inventory impact
+    inventory = inventory_summary(5)
+    low_stock_count = inventory.get('low_stock_count', 0)
+    
+    response += f"📊 Inventory Impact:\n"
+    response += f"  • Total inventory value: ${inventory.get('total_inventory_value', 0):.2f}\n"
+    response += f"  • Low stock items: {low_stock_count}\n"
+    return response
+@tool
+def update_price_tool(isbn: str, new_price: float) -> str:
+    """
+    Update the price of a book.
+    
+    CROSS-FUNCTION RELATIONSHIPS:
+    1. With find_books_tool: Find book before price change
+    2. With create_order_tool: Update price then create order
+    3. With inventory_summary_tool: See price impact on inventory value
+    4. With restock_book_tool: Update price during restock
+    5. With order_status_tool: Check orders with old vs new prices
+    
+    When used together:
+    - find_books_tool + update_price_tool: Find book then update its price
+    - update_price_tool + create_order_tool: Update price then create order
+    - update_price_tool + inventory_summary_tool: Update price then check inventory value
+    - restock_book_tool + update_price_tool: Restock then update price
+    
+    Args:
+        isbn: Book ISBN
+        new_price: New price in dollars
+    
+    Returns:
+        Confirmation message with price change
+    """
+    # Find current book details
+    all_books = find_books("", by="title")
+    current_book = None
+    for book in all_books:
+        if book['isbn'] == isbn:
+            current_book = book
+            break
+    
+    if not current_book:
+        return f"Book with ISBN {isbn} not found."
+    
+    old_price = current_book['price']
+    
+    # Update price
+    result = update_price(isbn, new_price)
+    
+    if "error" in result:
+        return f"❌ Error: {result['error']}"
+    
+    # Calculate changes
+    price_change = new_price - old_price
+    percent_change = (price_change / old_price * 100) if old_price > 0 else 0
+    inventory_value_change = price_change * current_book['stock']
+    
+    # Log tool call
+    save_tool_call("default_session", "update_price", 
+                  {"isbn": isbn, "new_price": new_price},
+                  {"title": result['title'], "old_price": old_price, "new_price": new_price})
+    
+    response = f"**Price Updated Successfully!**\n\n"
+    response += f"Price Change Details:\n"
+    response += f"  • Book: {result['title']}\n"
+    response += f"  • ISBN: {isbn}\n"
+    response += f"  • Old price: ${old_price:.2f}\n"
+    response += f"  • New price: ${new_price:.2f}\n"
+    response += f"  • Change: ${price_change:+.2f} ({percent_change:+.1f}%)\n"
+    response += f"  • Current stock: {current_book['stock']} copies\n"
+    response += f"  • Inventory value change: ${inventory_value_change:+.2f}\n\n"
+    
+    # Check inventory summary
+    inventory = inventory_summary(5)
+    
+    response += f"📊 Inventory Impact:\n"
+    response += f"  • New total inventory value: ${inventory.get('total_inventory_value', 0):.2f}\n"
+    response += f"  • Book's new total value: ${new_price * current_book['stock']:.2f}\n\n"
+    
+    # Suggest related actions
+    response += f"Related Actions:\n"
+    if price_change > 0:
+        response += f"  • Consider restock discount: `restock_book_tool(isbn='{isbn}', quantity=10)`\n"
+    response += f"  • Create order with new price: `create_order_tool(book_title='{result['title']}', customer_input='1', quantity=1)`\n"
+    response += f"  • Check similar books: `find_books_tool(q='{current_book['author']}', by='author')`\n"
+    
+    return response
 
-agent = CompatibleAgent(session_id="default_session")
+@tool
+def order_status_tool(order_id: int) -> str:
+    """
+    Check the status of an order.
+    
+    CROSS-FUNCTION RELATIONSHIPS:
+    1. With create_order_tool: Verify newly created orders
+    2. With find_books_tool: Get details of books in order
+    3. With inventory_summary_tool: Check stock of ordered items
+    4. With restock_book_tool: Restock items from the order
+    5. With update_price_tool: Check prices of ordered items
+    
+    When used together:
+    - create_order_tool + order_status_tool: Create order then verify it
+    - order_status_tool + find_books_tool: Check order then get book details
+    - order_status_tool + inventory_summary_tool: Check order then inventory
+    - order_status_tool + restock_book_tool: Check order then restock items
+    
+    Args:
+        order_id: Order ID number
+    
+    Returns:
+        Formatted order details and status
+    """
+    result = order_status(order_id)
+    
+    if "error" in result:
+        return f"Error: {result['error']}"
+    
+    # Get current stock for each book
+    stock_info = ""
+    inventory_suggestions = ""
+    if 'items' in result:
+        for item in result['items']:
+            book_search = find_books(item['title'], by="title")
+            if book_search:
+                current_stock = book_search[0]['stock']
+                stock_info += f"    • '{item['title']}': {current_stock} copies\n"
+                if current_stock < 3:
+                    inventory_suggestions += f"    ⚠️ '{item['title']}' is low! Restock: `restock_book_tool(isbn='{book_search[0]['isbn']}', quantity=10)`\n"
+    
+    # Build response
+    response = f"**Order #{order_id} Status**\n\n"
+    response += f"Order Summary:\n"
+    response += f"  • Status: {result['status']}\n"
+    response += f"  • Customer: {result.get('customer_name', 'Unknown')}\n"
+    response += f"  • Date: {result['created_at']}\n"
+    response += f"  • Total Amount: ${result['total_amount']:.2f}\n"
+    response += f"  • Items: {len(result.get('items', []))}\n\n"
+    
+    if 'items' in result:
+        response += f"🛒 Order Items:\n"
+        for i, item in enumerate(result['items'], 1):
+            qty = item.get('qty', 1)
+            subtotal = item['price'] * qty
+            response += f"  {i}. {item['title']} by {item['author']}\n"
+            response += f"     Qty: {qty}, Price: ${item['price']:.2f}, Subtotal: ${subtotal:.2f}\n"
+    
+    if stock_info:
+        response += f"\nCurrent Stock Levels:\n{stock_info}"
+    
+    if inventory_suggestions:
+        response += f"\nInventory Suggestions:\n{inventory_suggestions}"
+    
+    # Suggest related actions
+    response += f"\nRelated Actions:\n"
+    response += f"  • Create similar order: `create_order_tool(book_title='{result['items'][0]['title'] if result.get('items') else 'Clean Code'}', customer_input='{result.get('customer_id', 1)}', quantity=1)`\n"
+    response += f"  • Check inventory: `inventory_summary_tool(threshold=5)`\n"
+    response += f"  • Find similar books: `find_books_tool(q='{result['items'][0]['author'] if result.get('items') else 'Robert Martin'}', by='author')`\n"
+    
+    return response
+
+@tool
+def inventory_summary_tool(threshold: int = 5) -> str:
+    """
+    Get a summary of inventory status.
+    
+    CROSS-FUNCTION RELATIONSHIPS:
+    1. With find_books_tool: Get details of low-stock books
+    2. With restock_book_tool: Restock identified low-stock items
+    3. With create_order_tool: Check availability before ordering
+    4. With update_price_tool: Update prices of low/high stock items
+    5. With order_status_tool: Check orders affecting inventory
+    
+    When used together:
+    - inventory_summary_tool + find_books_tool: Get summary then book details
+    - inventory_summary_tool + restock_book_tool: Identify then restock low items
+    - inventory_summary_tool + create_order_tool: Check inventory then create order
+    - inventory_summary_tool + update_price_tool: Analyze then adjust prices
+    
+    Args:
+        threshold: Stock level threshold for low stock alert (default: 5)
+    
+    Returns:
+        Formatted inventory summary
+    """
+    result = inventory_summary(threshold)
+    
+    if isinstance(result, dict) and "error" in result:
+        return f"❌ Error: {result['error']}"
+    
+    low_stock_details = ""
+    response = f"**Inventory Summary**\n\n"
+    response += f"Overview:\n"
+    response += f"  • Total books: {result['total_books']}\n"
+    response += f"  • Total inventory value: ${result['total_inventory_value']:.2f}\n"
+    response += f"  • Out of stock: {result['out_of_stock_count']} books\n"
+    response += f"  • Low stock (≤{threshold}): {result['low_stock_count']} books\n\n"
+    
+    if low_stock_details:
+        response += f"📉 Top Low-Stock Books:\n{low_stock_details}\n"
+    
+    # Health assessment
+    response += f"Inventory Health:\n"
+    if result['out_of_stock_count'] > 0:
+        response += f" {result['out_of_stock_count']} book(s) are OUT OF STOCK - Urgent action needed!\n"
+    if result['low_stock_count'] > 0:
+        response += f"{result['low_stock_count']} book(s) are running low - Consider restocking\n"
+    if result['out_of_stock_count'] == 0 and result['low_stock_count'] == 0:
+        response += f"  ✅ All books are sufficiently stocked\n"
+        
+    
+    return response
+
+# List of all tools
+TOOLS = [
+    find_books_tool,
+    create_order_tool,
+    restock_book_tool,
+    update_price_tool,
+    order_status_tool,
+    inventory_summary_tool
+]

@@ -1,4 +1,40 @@
 # library-desk-agent
+
+💬 Chat Features
+✅ Send Messages via Enter key or Send button
+
+✅ Message History displays both user and assistant messages
+
+✅ Auto-scrolling to latest message
+
+✅ Message Formatting with emojis and Markdown-like styling
+
+✅ Clear Chat button to reset conversation
+
+📁 Session Management
+✅ Create New Sessions with unique IDs
+
+✅ Save Sessions with custom names
+
+✅ Load Saved Sessions from disk
+
+✅ Session List with preview of message count
+
+✅ Session Timestamps showing when saved
+
+✅ Persistent Storage in JSON format
+
+🔄 Agent Integration
+✅ Connect to AI Agent (agent_fixed.py)
+
+✅ Process Natural Language queries
+
+✅ Execute Database Operations through tools
+
+✅ Real-time Processing with threading
+
+✅ Error Handling with user-friendly messages
+
 # 1. Install dependencies
 ```bash
 pip install -r requirements.txt

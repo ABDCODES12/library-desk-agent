@@ -77,5 +77,8 @@ This is the landing page of the application.
 <p align="center"> <img src="https://github.com/user-attachments/assets/86de2673-ccec-47bf-b8d6-ab5fcd7c6dab" width="90%" /> </p>
 
 
+<img width="1919" height="785" alt="image" src="https://github.com/user-attachments/assets/74432d48-e40a-4537-8839-6a5b60cdf730" />
+<img width="1919" height="785" alt="image" src="https://github.com/user-attachments/assets/74432d48-e40a-4537-8839-6a5b60cdf730" />
+
 
 

@@ -70,15 +70,12 @@ This is the landing page of the application.
 🧪 Sample 2
 <p align="center"> <img src="https://github.com/user-attachments/assets/dc442976-2527-43e9-813f-83687cb8e377" width="90%" /> </p>
 🧪 Sample 3
-<p align="center"> <img src="https://github.com/user-attachments/assets/f86cd1da-c862-499e-b60b-a399026b96eb" width="90%" /> </p>
+<p align="center"> <img src="https://github.com/user-attachments/assets/74432d48-e40a-4537-8839-6a5b60cdf730" width="90%" /> </p>
 🧪 Sample 4
 <p align="center"> <img src="https://github.com/user-attachments/assets/7340b504-b70f-4332-8bab-52accadcf13b" width="90%" /> </p>
 🧪 Sample 5
 <p align="center"> <img src="https://github.com/user-attachments/assets/86de2673-ccec-47bf-b8d6-ab5fcd7c6dab" width="90%" /> </p>
 
-
-<img width="1919" height="785" alt="image" src="https://github.com/user-attachments/assets/74432d48-e40a-4537-8839-6a5b60cdf730" />
-<img width="1919" height="785" alt="image" src="https://github.com/user-attachments/assets/74432d48-e40a-4537-8839-6a5b60cdf730" />
 
 
 

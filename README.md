@@ -1,62 +1,39 @@
 # library-desk-agent
 # 1. Install dependencies
+```bash
 pip install -r requirements.txt
+```
 # 2. Create database with sample data
+```bash
 python scripts/seed_database.py
-
+```
 # 3. Run the application
+```bash
 library.db - Database Setup
-# Creates SQLite database with books, customers, and orders tables
-# Inserts 10 sample books and 6 sample customers
-# Creates: db/library.db
+```
+### Creates SQLite database with books, customers, and orders tables
+### Inserts 10 sample books and 6 sample customers
+### Creates: db/library.db
+```bash
 python scripts/seed_database.py
-# Output: ✅ Database seeded with 10 books and 6 customers
-
+```
+### Output:
+```bash
 python frontend.py - Application Launcher
-# Launches the Library Desk GUI
-# Starts the AI agent with tool calling capabilities
-Run it:
+```
 
-📊 What Gets Seeded
-Books Table (10 entries)
-Clean Code (ISBN: 9780132350884, Stock: 10)
+# Samples
+🏠 Main Page
 
-The Pragmatic Programmer (ISBN: 9780201616224, Stock: 5)
+This is the landing page of the application, showing the overall design and primary interaction area.
+<p align="center"> <img src="https://github.com/user-attachments/assets/bc760683-2fc2-427c-8d31-4a23259517f9" width="90%" /> </p>
+## Samples of input/output 
+<img width="1919" height="922" alt="image" src="https://github.com/user-attachments/assets/dc442976-2527-43e9-813f-83687cb8e377" />
+<img width="1919" height="760" alt="image" src="https://github.com/user-attachments/assets/a7dadcdb-acbd-4dee-bb71-fcac3330bb6b" />
+<img width="1919" height="697" alt="image" src="https://github.com/user-attachments/assets/7340b504-b70f-4332-8bab-52accadcf13b" />
+<img width="1919" height="750" alt="image" src="https://github.com/user-attachments/assets/3fab8afe-c839-4021-8194-c315964eb9a6" />
+<img width="1919" height="750" alt="image" src="https://github.com/user-attachments/assets/f86cd1da-c862-499e-b60b-a399026b96eb" />
+<img width="1919" height="897" alt="image" src="https://github.com/user-attachments/assets/86de2673-ccec-47bf-b8d6-ab5fcd7c6dab" />
 
-The C Programming Language (ISBN: 9780131103627, Stock: 7)
 
-Fluent Python (ISBN: 9781491957660, Stock: 6)
 
-Introduction to Algorithms (ISBN: 9780262033848, Stock: 4)
-
-Effective Java (ISBN: 9780134685991, Stock: 8)
-
-Designing Data-Intensive Applications (ISBN: 9781492078005, Stock: 3)
-
-Clean Architecture (ISBN: 9780134494166, Stock: 9)
-
-Spring in Action (ISBN: 9781617296086, Stock: 5)
-
-Python Data Science Handbook (ISBN: 9781492055020, Stock: 6)
-
-Customers Table (6 entries)
-Ahmad Mahmoud (ahmad@mail.com)
-
-Sara Khaled (sara@mail.com)
-
-Omar Hassan (omar@mail.com)
-
-Lina Youssef (lina@mail.com)
-
-Yousef Nasser (yousef@mail.com)
-
-Maya Adel (maya@mail.com)
-
-Sample Orders (4 orders)
-Order #1: Ahmad bought 2× Clean Code + 1× Effective Java
-
-Order #2: Sara bought 1× Pragmatic Programmer + 2× Designing Data-Intensive Applications
-
-Order #3: Omar bought 1× The C Programming Language
-
-Order #4: Lina bought 1× Fluent Python
